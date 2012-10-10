@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<configuration xmlns="http://logging.apache.org/log4php/">
+
+  <appender name="console" class="LoggerAppenderConsole" >
+    <layout class="LoggerLayoutPattern">
+      <param name="conversionPattern" value="%d{Y-m-d H:i:s.u} %c [%-5p] %m%n" />
+    </layout>
+  </appender>
+
+  <root>
+    <level value="WARN" />
+    <appender_ref ref="console" />
+  </root>
+
+  <logger name="Test\ConcurrencyMongo\JobQueue">
+    <level value="WARN" />
+  </logger>
+
+</configuration>
+
+

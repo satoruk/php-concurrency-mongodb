@@ -1,0 +1,5 @@
+bin/*
+build/*
+log4php.local.xml
+vendor/*
+

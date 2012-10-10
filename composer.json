@@ -1,0 +1,25 @@
+{
+  "name" : "concurrency-mongo",
+  "description" : "",
+  "config": {
+    "vendor-dir" : "vendor",
+    "bin-dir"    : "bin"
+  },
+  "autoload": {
+    "psr-0": { "ConcurrencyMongo": "" }
+  },
+  "require": {
+    "php" : ">=5.3",
+    "pear-pear.apache.org/log4php/Apache_log4php" : "2.2.*"
+  },
+  "require-dev": {
+    "phpunit/phpunit": "3.7.*",
+    "EHER/PHPUnit" : ">=1.6"
+  },
+  "repositories": [  
+    {
+      "type": "pear",
+      "url": "http://pear.apache.org/log4php/"
+    }
+  ]
+}
