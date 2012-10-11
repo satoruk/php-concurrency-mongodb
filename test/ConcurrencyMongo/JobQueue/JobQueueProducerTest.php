@@ -38,12 +38,15 @@ class JobQueueProducer4Test extends JobQueueProducer {
 }
 
 
+
 class JobQueueProducerTest extends PHPUnit_Framework_TestCase
 {
 
   public $log;
   public $mongoDB;
   public $producer;
+
+
 
   /**
    * Sets up the fixture, for example, opens a network connection.
@@ -69,6 +72,8 @@ class JobQueueProducerTest extends PHPUnit_Framework_TestCase
     $mcJobQueue = $this->mongoDB->selectCollection($this->producer->getName());
     $mcJobQueue->remove(array(), array('safe'=>true));
   }
+
+
 
   /**
    * Tears down the fixture, for example, closes a network connection.
@@ -201,6 +206,20 @@ class JobQueueProducerTest extends PHPUnit_Framework_TestCase
     $this->assertEquals(2, $cnt);
     $this->assertEquals(11, $this->producer->cntBatchInsert, 'Should be 11 times batch insert');
     $this->assertEquals(31, $this->producer->cntJob        , '31 jobs');
+  }
+
+
+
+  /**
+   * Producerが登録した処理中のJob数の検証
+   */
+  public function testCount(){
+    $this->log->info('call');
+    $this->assertEquals(0, $this->producer->getCount());
+    $this->producer->enqueue('LABEL_001', 'value 001_01');
+    $this->assertEquals(1, $this->producer->getCount());
+    $this->producer->enqueue('LABEL_001', 'value 001_02');
+    $this->assertEquals(2, $this->producer->getCount());
   }
 
 

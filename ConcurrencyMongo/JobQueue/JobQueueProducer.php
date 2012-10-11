@@ -13,6 +13,7 @@ class JobQueueProducer {
   protected static $prefixMC = 'JobQueue_';
 
   private $log;
+  private $cache = array();
 
   protected $opts;
   protected $func;
@@ -89,6 +90,7 @@ class JobQueueProducer {
 
 
   public function ensureIndex() {
+    $this->log->warn('this method is pending');
     // TODO
     //$this->mcJobQueue->ensureIndex(array('opid'=>1,'label'=>1), array('safe'=>true));// 
   }
@@ -119,7 +121,22 @@ class JobQueueProducer {
       throw $e;
     }
     $this->disableBuffer();
-    // TODO JobQueue内のロック中も含めてopidが居なくなるのを監視して関数を実行することで同期をとる.
+  }
+
+
+
+  public function isDone() {
+    return 0 == $this->getCount();
+  }
+
+
+
+  /**
+   * Producerが登録した処理中のJob数
+   */
+  public function getCount($opts=array()) {
+    $cnt = $this->mcJobQueue->count(array('opid' => $this->opts['opid']));
+    return $cnt;
   }
 
 
