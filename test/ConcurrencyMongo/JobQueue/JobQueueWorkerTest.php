@@ -86,12 +86,15 @@ class JobQueueWorkerTest extends PHPUnit_Framework_TestCase
         $job->release();
         $self->assertTrue($job->isExpired(),'Should be expired');
       }
-      if($cnt==2){
+      elseif($cnt==2){
         // ジョブを完了させる
         $self->assertEquals('value 001_01', $job->getValue());// キャンセルしたものが再取得される
         $self->assertFalse($job->isExpired(),'Should not be expired');
         $job->done();
         $self->assertTrue($job->isExpired(),'Should be expired');
+      }
+      else{
+        $job->done();// doneさせないとデストラクタで自動的にreleaseされ無限ループになる
       }
     });
     while($worker->run());// Jobがある限りループ
@@ -127,7 +130,7 @@ class JobQueueWorkerTest extends PHPUnit_Framework_TestCase
       if($cnt==1) $self->assertEquals('value 001_01', $job->getValue());
       if($cnt==2) $self->assertEquals('value 001_02', $job->getValue());
       if($cnt==3) $self->assertEquals('value 001_03', $job->getValue());
-      //$job->done();
+      $job->done();
     });
     while($worker->run());
     $self->assertEquals(3, $cnt);
@@ -172,7 +175,7 @@ class JobQueueWorkerTest extends PHPUnit_Framework_TestCase
           $exceptions[] = $e;
         }
       }
-      if($cnt==2){
+      elseif($cnt==2){
         // 失効 (プロパティ参照)
         $self->assertEquals('value 001_01', $job->getValue());// 失効したものが再取得される.
         $job->forceExpire();// 強制的に失効させる
@@ -184,6 +187,9 @@ class JobQueueWorkerTest extends PHPUnit_Framework_TestCase
           $self->log->trace('Caught ExpiredJobException');
           $exceptions[] = $e;
         }
+      }
+      else{
+        $job->done();
       }
     });
     while($worker->run());

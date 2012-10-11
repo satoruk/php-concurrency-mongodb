@@ -2,12 +2,12 @@
 
 namespace ConcurrencyMongo\JobQueue;
 
-use Exception;
 use InvalidArgumentException;
 use MongoCollection;
 use MongoDate;
 use Logger;
 use ConcurrencyMongo\JobQueue\ExpiredJobException;
+use ConcurrencyMongo\JobQueue\JobQueueException;
 
 class Job {
 
@@ -51,6 +51,12 @@ class Job {
 
 
 
+  public function __destruct() {
+    $this->release();
+  }
+
+
+
   public function getLabel() {
     $this->validateExpired();
     return $this->opts['label'];
@@ -72,8 +78,9 @@ class Job {
     $newdata  = array('$set' => array('lockBy' => null, 'lockExpiredAt' => new MongoDate(0)));
     $options  = array('safe' => true);
     $v = $this->mcJobQueue->update($criteria, $newdata, $options);
-    if($v['ok'] != 1) throw new Exception('Mongo error : ' . var_export($v, true));// TODO Exceptionを継承する.
-    if($v['n' ] != 1) throw new Exception('Should be update a job : ' . var_export($v, true));
+    if($v['ok'] != 1) throw new JobQueueException('Mongo error : ' . var_export($v, true));
+    if($v['n' ] >= 2) throw new JobQueueException('Should be update a job : ' . var_export($v, true));
+    // n=0 既に失効してJobが他に割り当てられた, n=1 Jobを解放した.
     $this->expired = true;
   }
 
@@ -85,8 +92,8 @@ class Job {
     $criteria = array('_id' => $this->opts['_id'], 'lockBy' => $this->opts['lockBy'], 'lockExpiredAt' => $this->opts['lockExpiredAt']);
     $options  = array('safe' => true);
     $v = $this->mcJobQueue->remove($criteria, $options);
-    if($v['ok'] != 1) throw new Exception('Mongo error : ' . var_export($v, true));// TODO Exceptionを継承する.
-    if($v['n' ] != 1) throw new Exception('Should be update a job : ' . var_export($v, true));
+    if($v['ok'] != 1) throw new JobQueueException('Mongo error : ' . var_export($v, true));
+    if($v['n' ] != 1) throw new JobQueueException('Should be update a job : ' . var_export($v, true));
     $this->expired = true;
   }
 

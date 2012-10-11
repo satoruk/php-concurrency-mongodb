@@ -3,8 +3,8 @@
 namespace ConcurrencyMongo\JobQueue;
 
 use MongoDB;
-use Exception;
 use InvalidArgumentException;
+use ConcurrencyMongo\JobQueue\JobQueueException;
 use ConcurrencyMongo\JobQueue\Job;
 use Logger;
 
@@ -121,7 +121,7 @@ EOD;
         $this->opts['uuid']
       );
       $v = $this->mdb->execute($code, $args);
-      if(@$v['ok'] !== 1.0) throw new Exception('Mongo error : ' . var_export($v, true));// TODO Exceptionを継承する.
+      if(@$v['ok'] != 1) throw new JobQueueException('Mongo error : ' . var_export($v, true));
       if(is_null($v['retval'])) continue;
       $job = new Job($this->mcJobQueue, $v['retval']);
       foreach($workers as $worker){

@@ -1,75 +1,13 @@
 <?php
 
+namespace ConcurrencyMongo\ResourcePool;
 
-class ResourceException extends Exception {
-  public function __construct($message, $code = 0, Exception $previous = null) {
-    parent::__construct($message, $code, $previous);
-  }
-}
-
-class ExpiredResourceException extends ResourceException {
-  public function __construct($message, $code = 0, Exception $previous = null) {
-    parent::__construct($message, $code, $previous);
-  }
-}
-
-class ResourceData {
-
-  protected static $messageAlreadyReleased = 'This resource is already released.';
-
-  protected $released;
-  protected $pool;
-  protected $data;
-
-  public function __construct($pool, &$data) {
-    $this->pool = $pool;
-    $this->data = &$data;
-    $this->released = false;
-  }
-
-  public function __destruct() {
-    if(!$this->isReleased()) {
-      $this->release();
-    }
-  }
-
-  public function getValue() {
-    if($this->isReleased()) {
-      throw new ResourceException(self::$messageAlreadyReleased);
-    }
-    $this->update();
-    return @$this->data['data']['resource'];
-  }
-
-  protected function update() {
-    $this->pool->update();
-  }
-
-  public function release($blockSec=null) {
-    if ($this->isReleased()) {
-      throw new ResourceException(self::$messageAlreadyReleased);
-    }
-    if (is_null($blockSec)) {
-      $blockSec = ResourcePool::$statusInFree;
-    } else {
-      $blockSec += time();
-    }
-    $this->data['status'] = $blockSec;
-    $this->released = true;
-    $this->pool->update();
-  }
-
-  public function isReleased() {
-    return $this->released;
-  }
-
-  public function broken() {
-    if($this->released) {
-      throw new ResourceException(self::$messageAlreadyReleased);
-    }
-    $this->release();
-  }
-}
+use InvalidArgumentException;
+use MongoDB;
+use Logger;
+use ConcurrencyMongo\ResourcePool\ResourceException;
+use ConcurrencyMongo\ResourcePool\ExpiredResourceException;
+use ConcurrencyMongo\ResourcePool\ResourceData;
 
 /**
  * 並列リソースプール
@@ -100,6 +38,8 @@ class ResourcePool {
   protected static $messageAlreadyExpired = 'This resource is already expired.';
   protected static $prefixMC = 'resourcePool_';
 
+  private $log;
+
   protected $uuid;
   protected $extraSec;
   protected $extraSecRate;
@@ -129,6 +69,8 @@ class ResourcePool {
   protected $list;
 
   public function __construct($mongoDB, $name, $opts=array()) {
+    $this->log = Logger::getLogger(__CLASS__);
+
     if (!($mongoDB instanceof MongoDB)) {
       throw new InvalidArgumentException('An argument is not MongoDB instance.');
     }
@@ -251,7 +193,7 @@ class ResourcePool {
     if(@$v['ok'] !== 1.0) {
       throw new Exception('Mongo error : ' . var_export($v, true));
     }
- }
+  }
 
   /**
    * リソースの延長処理

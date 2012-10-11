@@ -76,7 +76,7 @@ class JobQueueProducerTest extends PHPUnit_Framework_TestCase
    */
   protected function tearDown()
   {
-    $this->log->info('tearDown');
+    $this->log->debug('tearDown');
   }
 
 
@@ -85,7 +85,7 @@ class JobQueueProducerTest extends PHPUnit_Framework_TestCase
    * フラッシュタイミング(単一ラベル)
    */
   public function testFlushSingleLabel(){
-    $this->log->info('call');
+    $this->log->debug('call');
     $self = $this;
     $cnt = 0;
     // enqueueルールを設定
