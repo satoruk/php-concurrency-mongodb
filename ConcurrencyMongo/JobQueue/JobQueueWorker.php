@@ -105,6 +105,7 @@ function(mcName, label, extraMSec, uuid){
   return db[mcName].findAndModify({query:q, update:u, sort:s, new:true});
 }
 EOD;
+    $workedCnt = 0;
     foreach($this->workers as $label => $workers){
       if($this->log->isDebugEnabled()){
         $this->log->debug(sprintf(
@@ -127,9 +128,9 @@ EOD;
       foreach($workers as $worker){
         $worker($job);
       }
-      return true;
+      $workedCnt++;
     }
-    return false;
+    return $workedCnt > 0;
   }
 
 }
