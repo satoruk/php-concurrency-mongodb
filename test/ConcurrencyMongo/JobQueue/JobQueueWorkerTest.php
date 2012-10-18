@@ -4,6 +4,7 @@ namespace Test\ConcurrencyMongo\JobQueue;
 
 use PHPUnit_Framework_TestCase;
 use Mongo;
+use MongoDB;
 use Logger;
 use ConcurrencyMongo\JobQueue\JobQueueProducer;
 use ConcurrencyMongo\JobQueue\JobQueueWorker;
@@ -24,15 +25,15 @@ class JobQueueWorkerTest extends PHPUnit_Framework_TestCase
    */
   protected function setUp()
   {
-    $this->log = Logger::getLogger('Test\ConcurrencyMongo\JobQueue');
-    $this->log->info('setup');
+    $this->log = Logger::getLogger(__CLASS__);
+    $this->log->info('call');
 
     $mongo = new Mongo();
     $this->mongoDB = $mongo->selectDB('test_php_cncurrencymongo');
 
     $this->producer = new JobQueueProducer(
+      $this->mongoDB,
       array(
-        'mongodb'=>$this->mongoDB,
         'name'=>'test',
         'bufferSize'=>3,
         'extraExpiredSec'=>1
@@ -74,7 +75,7 @@ class JobQueueWorkerTest extends PHPUnit_Framework_TestCase
 
     // 
     $cnt = 0;
-    $worker = new JobQueueWorker(array('mongodb'=>$this->mongoDB, 'name'=>'test'));
+    $worker = new JobQueueWorker($this->mongoDB, array('name'=>'test'));
     $worker->add('LABEL_001', function($job) use ($self, &$cnt){
       ++$cnt;
       $self->log->trace(sprintf('cnt:%d value:%s', $cnt, $job->getValue()));
@@ -123,7 +124,7 @@ class JobQueueWorkerTest extends PHPUnit_Framework_TestCase
     $this->producer->run();
 
     $cnt = 0;
-    $worker = new JobQueueWorker(array('mongodb'=>$this->mongoDB, 'name'=>'test'));
+    $worker = new JobQueueWorker($this->mongoDB, array('name'=>'test'));
     $worker->add('LABEL_001', function($job) use ($self, &$cnt){
       ++$cnt;
       $self->log->debug($job->getValue());
@@ -157,7 +158,7 @@ class JobQueueWorkerTest extends PHPUnit_Framework_TestCase
 
     $cnt = 0;
     $exceptions = array();
-    $worker = new JobQueueWorker(array('mongodb'=>$this->mongoDB, 'name'=>'test'));
+    $worker = new JobQueueWorker($this->mongoDB, array('name'=>'test', 'extraExpiredSec'=>2));
     $worker->add('LABEL_001', function($job) use ($self, &$cnt, &$exceptions){
       ++$cnt;
       $self->log->trace(sprintf('cnt:%d value:%s', $cnt, $job->getValue()));

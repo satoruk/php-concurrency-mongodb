@@ -129,4 +129,60 @@ class JobQueueTest extends PHPUnit_Framework_TestCase
   }
 
 
+
+  /**
+   * JobQueue(label毎)が大きくなりすぎた場合の待ち
+   */
+  public function testWaitDuringJobQueueAsFull(){
+    $this->log->info('call');
+    $threshold = 20;// JobQueueがいっぱいになる閾値
+    $q = new JobQueue($this->mongoDB, array('name'=>'test', 'bufferSize'=>2, 'extraExpiredSec'=>1));
+    $q->enableBuffer();
+    $this->assertEquals(0, $q->countJob());
+    for ($i=1; $i<=$threshold; $i++) {
+      $q->enqueue('opid_1', 'Sun', sprintf('v_%2d', $i));
+    }
+    $this->assertEquals(20, $q->countJob());
+    $q->enqueue('opid_1', 'Sun', 'v_21');
+    $q->disableBuffer();// しばらく待ち状態になるが、最終的にはenqueueされる.
+    $this->assertEquals(21, $q->countJob());
+  }
+
+
+
+  /**
+   */
+  public function testFindJob(){
+    $this->log->info('call');
+    $q = new JobQueue($this->mongoDB, array('name'=>'test'));
+
+    // Jobの登録
+    $this->assertEquals(0, $q->countJob());
+    $q->enqueue('opid_1', 'Sun', 'v_1');
+    $this->assertEquals(1, $q->countJob());
+
+    // jobの取得
+    $job1 = $q->findJob('lockopid_1', 'Sun');
+    $this->assertNotNull($job1);
+    $this->assertEquals('Sun', $job1->getLabel());
+    $this->assertEquals('v_1', $job1->getValue());
+
+    // jobは割当中なので取得できない
+    $job2 = $q->findJob('lockopid_1', 'Sun');
+    $this->assertNull($job2);
+
+    // jobを解放して再取得
+    $job1->release();
+    $job3 = $q->findJob('lockopid_1', 'Sun');
+    $this->assertEquals('Sun', $job3->getLabel());
+    $this->assertEquals('v_1', $job3->getValue());
+
+    // jobを完了させる
+    $job3->done();
+    $job4 = $q->findJob('lockopid_1', 'Sun');
+    $this->assertNull($job4);
+  }
+
+
+
 }

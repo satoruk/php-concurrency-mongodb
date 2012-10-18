@@ -10,10 +10,20 @@ use Logger;
 
 class JobQueue {
 
+  /*
+   *
+   * extraExpiredSec : JobQueue上のラベル毎のJobの数多い場合が指定時間停止
+   */
+  public static $defaultOptions = array(
+    'name'       => 'default', // collection name
+    'priority'   => 5,         // priority, 0 is most high priority
+    'bufferSize' => 100,       // buffer size
+    'autoIndex'  => false,     // ensure indexes automatically
+    'extraExpiredSec' => 60    // 失効延長時間(秒) 失効した場合 expiredWaitがコールされる.
+  );
+
   protected static $prefixMC = 'JobQueue_';
-
   private $log;
-
   protected $opts;
 
   /**
@@ -23,19 +33,13 @@ class JobQueue {
   protected $bufferSize;
   protected $buffered = false;
 
+  protected $mdb;
   protected $mcJobQueue;
 
   public function __construct(MongoDB $mongoDB, $opts=array()) {
     $this->log = Logger::getLogger(__CLASS__);
 
-    $defaultOpts = array(
-      'name'       => 'default', // collection name
-      'priority'   => 5,         // priority, 0 is most high priority
-      'bufferSize' => 100,       // buffer size
-      'autoIndex'  => false,     // ensure indexes automatically
-      'extraExpiredSec' => 60    // 失効延長時間(秒) 失効した場合 expiredWaitがコールされる.
-    );
-
+    $defaultOpts = self::$defaultOptions;
     $mergedOpts = array();
     foreach($defaultOpts as $k => $v) {
       $mergedOpts[$k] = isset($opts[$k]) ? $opts[$k]: $v;
@@ -66,6 +70,7 @@ class JobQueue {
     $this->opts = $mergedOpts;
     $this->bufferSize = intval($mergedOpts['bufferSize']);
     $this->extraExpiredSec = intval($mergedOpts['extraExpiredSec']);
+    $this->mdb = $mongoDB;
     $this->mcJobQueue = $mongoDB->selectCollection(self::$prefixMC . $mergedOpts['name']);
 
     if($mergedOpts['autoIndex']===true)
@@ -281,6 +286,76 @@ class JobQueue {
     if($this->log->isDebugEnabled()){
       $this->log->debug(sprintf('insert jobs qty:%d', count($jobs)));
     }
+  }
+
+
+
+  /**
+   *
+   *
+   * @param $opid lock operation id
+   * @param $label find form JobQueue
+   * @param $opts
+   * @return Jobがある場合はJobを、無い場合nullを返す
+   */
+  public function findJob($opid, $label, $opts=array()) {
+    $this->log->debug('call');
+
+    $defaultOpts = array(
+      'extraExpiredSec' => $this->opts['extraExpiredSec']
+    );
+
+    $mergedOpts = array();
+    foreach($defaultOpts as $k => $v) {
+      $mergedOpts[$k] = isset($opts[$k]) ? $opts[$k]: $v;
+      unset($opts[$k]);
+    }
+
+    /*
+     * Validations
+     */
+
+    if(!is_string($opid))
+      throw new InvalidArgumentException('$opid is only accept string value.');
+
+    if(!is_string($label))
+      throw new InvalidArgumentException('$label is only accept string value.');
+
+    if(!empty($opts))
+      throw new InvalidArgumentException('Unknown opts keys : ' . implode(' and ',array_keys($opts)));
+
+    // integer
+    foreach (array('extraExpiredSec') as $k)
+      if(!is_integer($mergedOpts[$k]))
+        throw new InvalidArgumentException(sprintf('%s of $opts is only accept integer value.', $k));
+
+    //
+    $extraExpiredSec = $mergedOpts['extraExpiredSec'];
+
+    /*
+     * Jobの検索
+     */
+    $code = <<<'EOD'
+function(mcName, label, extraMSec, uuid){
+  var now, q, u, s;
+  now=new Date();
+  q={label:label,lockExpiredAt:{$lt:now}};
+  u={$set:{lockExpiredAt:new Date(now.getTime() + extraMSec),lockBy:uuid}};
+  s={priority:1,_id:1};
+  return db[mcName].findAndModify({query:q, update:u, sort:s, new:true});
+}
+EOD;
+    $args = array(
+      $this->getName(),
+      $label,
+      $extraExpiredSec * 1000,// ミリ秒に変換
+      $opid
+    );
+    $v = $this->mdb->execute($code, $args);
+    if(@$v['ok'] != 1) throw new JobQueueException('Mongo error : ' . var_export($v, true));
+    if(is_null($v['retval'])) return null;
+    $job = new Job($this->mcJobQueue, $v['retval']);
+    return $job;
   }
 
 
