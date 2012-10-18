@@ -8,37 +8,32 @@ use MongoDB;
 use MongoDate;
 use Logger;
 
-class JobQueueProducer {
+class JobQueue {
 
   protected static $prefixMC = 'JobQueue_';
 
   private $log;
-  private $cache = array();
 
   protected $opts;
-  protected $func;
-  protected $terminated = false;
-  protected $buffered = false;
-  protected $bufferSize;
 
   /**
-   * array( $label=>array( 'expired'=>integer $expiredTime, 'jobs'=>array( array('value'=>mixed $value, 'opts'=>array() ), ... ) ), ... )
+   * array( $label=>array( 'expired'=>integer $expiredTime, 'jobs'=>array( array('opid'=>string, 'value'=>mixed $value, 'opts'=>array() ), ... ) ), ... )
    */
   protected $bufferDatas = array();
-  protected $extraExpiredSec;
+  protected $bufferSize;
+  protected $buffered = false;
+
   protected $mcJobQueue;
 
-  public function __construct($opts=array()) {
+  public function __construct(MongoDB $mongoDB, $opts=array()) {
     $this->log = Logger::getLogger(__CLASS__);
 
     $defaultOpts = array(
-      'mongodb'    => null,         // MongoDB
-      'name'       => 'default',    // collection name
-      'bufferSize' => 100,          // buffer size
-      'priority'   => 5,            // priority, 0 is most high priority
-      'opid'       => uniqid('op'), // Operation ID
-      'autoIndex'  => true,         // ensure indexes automatically
-      'extraExpiredSec' => 60       // 失効延長時間(秒) 失効した場合 expiredWaitがコールされる.
+      'name'       => 'default', // collection name
+      'priority'   => 5,         // priority, 0 is most high priority
+      'bufferSize' => 100,       // buffer size
+      'autoIndex'  => false,     // ensure indexes automatically
+      'extraExpiredSec' => 60    // 失効延長時間(秒) 失効した場合 expiredWaitがコールされる.
     );
 
     $mergedOpts = array();
@@ -47,11 +42,11 @@ class JobQueueProducer {
       unset($opts[$k]);
     }
 
+    if(!($mongoDB instanceof MongoDB))
+      throw new InvalidArgumentException('$mongodb is not MongoDB instance.');
+
     if(!empty($opts))
       throw new InvalidArgumentException('Unknown opts keys : ' . implode(' and ',array_keys($opts)));
-
-    if(!($mergedOpts['mongodb'] instanceof MongoDB))
-      throw new InvalidArgumentException('mongodb of $opts is not MongoDB instance.');
 
     // integer
     foreach (array('bufferSize', 'priority', 'extraExpiredSec') as $k)
@@ -59,7 +54,7 @@ class JobQueueProducer {
         throw new InvalidArgumentException(sprintf('%s of $opts is only accept integer value.', $k));
 
     // string
-    foreach (array('name', 'opid') as $k)
+    foreach (array('name') as $k)
       if(!is_string($mergedOpts[$k]))
         throw new InvalidArgumentException(sprintf('%s of $opts is only accept string value.', $k));
 
@@ -71,7 +66,7 @@ class JobQueueProducer {
     $this->opts = $mergedOpts;
     $this->bufferSize = intval($mergedOpts['bufferSize']);
     $this->extraExpiredSec = intval($mergedOpts['extraExpiredSec']);
-    $this->mcJobQueue = $mergedOpts['mongodb']->selectCollection(self::$prefixMC . $mergedOpts['name']);
+    $this->mcJobQueue = $mongoDB->selectCollection(self::$prefixMC . $mergedOpts['name']);
 
     if($mergedOpts['autoIndex']===true)
       $this->ensureIndex();
@@ -97,51 +92,33 @@ class JobQueueProducer {
 
 
 
-  //public function set($func) {
-  public function set($func) {
-    if(!is_callable($func))
-      throw new InvalidArgumentException('function only accepts function. Input was: ' . $func);
-    $this->func = $func;
-  }
-
-
-
-  public function run() {
-    $this->log->debug('call');
-    $func = $this->func;
-    if (!is_callable($func)) return false;
-    $this->enableBuffer();
-    try{
-      while(!$this->terminated){
-        $this->terminated = true;
-        $func($this);
-      }
-    }catch(Exception $e){
-      $this->disableBuffer();
-      throw $e;
+  public function countJob($opid=null){
+    $query = array();
+    if(!is_null($opid)){
+      if(!is_string($opid)) throw new InvalidArgumentException('$opid is only accept string value.');
+      $query['opid'] = $opid;
     }
-    $this->disableBuffer();
-  }
-
-
-
-  public function isDone() {
-    return 0 == $this->getCount();
-  }
-
-
-
-  /**
-   * Producerが登録した処理中のJob数
-   */
-  public function getCount($opts=array()) {
-    $cnt = $this->mcJobQueue->count(array('opid' => $this->opts['opid']));
+    $cnt = $this->mcJobQueue->count($query);
     return $cnt;
   }
 
 
 
-  public function enqueue($label, $value, $opts=array()){
+  public function countLabel($label, $opid=null){
+    $query = array();
+    if(!is_string($label)) throw new InvalidArgumentException('$label is only accept string value.');
+    $query['label'] = $label;
+    if(!is_null($opid)){
+      if(!is_string($opid)) throw new InvalidArgumentException('$opid is only accept string value.');
+      $query['opid'] = $opid;
+    }
+    $cnt = $this->mcJobQueue->count($query);
+    return $cnt;
+  }
+
+
+
+  public function enqueue($opid, $label, $value, $opts=array()){
     $defaultOpts = array(
       'priority' => $this->opts['priority']
     );
@@ -152,6 +129,19 @@ class JobQueueProducer {
       unset($opts[$k]);
     }
 
+    /*
+     * Validations
+     */
+
+    if(!is_string($opid))
+      throw new InvalidArgumentException('$opid is only accept string value.');
+
+    if(!is_string($label))
+      throw new InvalidArgumentException('$label is only accept string value.');
+
+    if(is_null($value))
+      throw new InvalidArgumentException('$value is not null.');
+
     if(!empty($opts))
       throw new InvalidArgumentException('Unknown opts keys : ' . implode(' and ',array_keys($opts)));
 
@@ -160,16 +150,13 @@ class JobQueueProducer {
       if(!is_integer($mergedOpts[$k]))
         throw new InvalidArgumentException(sprintf('%s of $opts is only accept integer value.', $k));
 
-    if(is_null($value))
-      throw new InvalidArgumentException('value is not null.');
-
     if(!array_key_exists($label, $this->bufferDatas)) {
       $this->beforeCreateBuffer($label);
-      $extraExpiredSec4Buffer = 1;
+      $extraExpiredSec4Buffer = 1;// 1秒でFlushするようにする
       $this->bufferDatas[$label] = array('jobs'=>array(), 'expired'=>time()+$extraExpiredSec4Buffer);
     }
 
-    $this->bufferDatas[$label]['jobs'][] = array('value'=>$value, 'opts'=>$mergedOpts);
+    $this->bufferDatas[$label]['jobs'][] = array('opid' => $opid, 'value'=>$value, 'opts'=>$mergedOpts);
 
     if($this->log->isTraceEnabled()){
       $this->log->trace(sprintf('call enqueue label:%s, jobs:%d', $label, count($this->bufferDatas[$label]['jobs'])));
@@ -177,7 +164,6 @@ class JobQueueProducer {
     }
 
     $this->flush();
-    $this->terminated = false;
   }
 
 
@@ -215,7 +201,6 @@ class JobQueueProducer {
 
 
   protected function expiredWait($label){
-    // ログで警告だけだすが処理は続行する. あとの対処はWorkerの処理を早くさせる等で解決させる.
     $this->log->warn(sprintf('expired wait, label %s of %s is still full.', $label, $this->getName()));
   }
 
@@ -229,26 +214,26 @@ class JobQueueProducer {
 
 
 
-  protected function isBuffer(){
+  public function isBuffer(){
     return $this->buffered;
   }
 
 
 
-  protected function enableBuffer(){
+  public function enableBuffer(){
     $this->buffered=true;
   }
 
 
 
-  protected function disableBuffer(){
+  public function disableBuffer(){
     $this->buffered=false;
     $this->flush(true);
   }
 
 
 
-  protected function flush($force=false){
+  public function flush($force=false){
     $force = $force === true;
     $flushedLabels = array();
     $tmpJobs = array();
@@ -256,22 +241,23 @@ class JobQueueProducer {
       $jobs = $datas['jobs'];
       $cnt = count($jobs);
       if($cnt <= 0) continue;
+      $forceByLabel = $force === true;
       // force is true if buffer was expired
-      if($datas['expired'] < time()){
-        $force = true;
+      if($datas['expired'] <= time()){
+        $forceByLabel = true;
         if($this->log->isTraceEnabled()){
           $this->log->trace(sprintf('buffer datas expired, so force flush. label:%s ', $label));
         }
       }
-      if(!$force and $this->isBuffer() and $cnt < $this->bufferSize) continue;
+      if(!$forceByLabel and $this->isBuffer() and $cnt < $this->bufferSize) continue;
       foreach($jobs as $job) {
         $tmpJobs[] = array(
           'label'         => $label,
           'value'         => $job['value'],
           'priority'      => $job['opts' ]['priority'],
-          'opid'          => $this->opts['opid'],
+          'opid'          => $job['opid'],
           'lockBy'        => null,
-          'lockExpiredAt' => new MongoDate()// nowでロッックを即時解除
+          'lockExpiredAt' => new MongoDate()
         );
       }
       $flushedLabels[] = $label;
