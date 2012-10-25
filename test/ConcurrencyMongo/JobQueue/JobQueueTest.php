@@ -162,24 +162,24 @@ class JobQueueTest extends PHPUnit_Framework_TestCase
     $this->assertEquals(1, $q->countJob());
 
     // jobの取得
-    $job1 = $q->findJob('lockopid_1', 'Sun');
+    $job1 = $q->findJob('lockopid_1', array('Sun'));
     $this->assertNotNull($job1);
     $this->assertEquals('Sun', $job1->getLabel());
     $this->assertEquals('v_1', $job1->getValue());
 
     // jobは割当中なので取得できない
-    $job2 = $q->findJob('lockopid_1', 'Sun');
+    $job2 = $q->findJob('lockopid_1', array('Sun'));
     $this->assertNull($job2);
 
     // jobを解放して再取得
     $job1->release();
-    $job3 = $q->findJob('lockopid_1', 'Sun');
+    $job3 = $q->findJob('lockopid_1', array('Sun'));
     $this->assertEquals('Sun', $job3->getLabel());
     $this->assertEquals('v_1', $job3->getValue());
 
     // jobを完了させる
     $job3->done();
-    $job4 = $q->findJob('lockopid_1', 'Sun');
+    $job4 = $q->findJob('lockopid_1', array('Sun'));
     $this->assertNull($job4);
   }
 

@@ -298,7 +298,7 @@ class JobQueue {
    * @param $opts
    * @return Jobがある場合はJobを、無い場合nullを返す
    */
-  public function findJob($opid, $label, $opts=array()) {
+  public function findJob($opid, array $labels=array(), array $opts=array()) {
     $this->log->debug('call');
 
     $defaultOpts = array(
@@ -318,8 +318,12 @@ class JobQueue {
     if(!is_string($opid))
       throw new InvalidArgumentException('$opid is only accept string value.');
 
-    if(!is_string($label))
-      throw new InvalidArgumentException('$label is only accept string value.');
+    if(!is_array($labels))
+      throw new InvalidArgumentException('$labels is only accept array value.');
+
+    foreach($labels as $label)
+      if(!is_string($label))
+        throw new InvalidArgumentException('$labels should contain to accept string value. : ' . gettype($label) );
 
     if(!empty($opts))
       throw new InvalidArgumentException('Unknown opts keys : ' . implode(' and ',array_keys($opts)));
@@ -336,10 +340,11 @@ class JobQueue {
      * Jobの検索
      */
     $code = <<<'EOD'
-function(mcName, label, extraMSec, uuid){
+function(mcName, labels, extraMSec, uuid){
   var now, q, u, s;
   now=new Date();
-  q={label:label,lockExpiredAt:{$lt:now}};
+  q={lockExpiredAt:{$lt:now}};
+  if (labels.length > 0) q.label = {$in:labels};
   u={$set:{lockExpiredAt:new Date(now.getTime() + extraMSec),lockBy:uuid}};
   s={priority:1,_id:1};
   return db[mcName].findAndModify({query:q, update:u, sort:s, new:true});
@@ -347,8 +352,8 @@ function(mcName, label, extraMSec, uuid){
 EOD;
     $args = array(
       $this->getName(),
-      $label,
-      $extraExpiredSec * 1000,// ミリ秒に変換
+      $labels,
+      $extraExpiredSec * 1000,// 秒をミリ秒に変換
       $opid
     );
     $v = $this->mdb->execute($code, $args);

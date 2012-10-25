@@ -78,24 +78,30 @@ class JobQueueWorker {
    */
   public function run() {
     $this->log->debug('call');
-    $workedCnt = 0;
-    foreach($this->workers as $label => $workers){
-      if($this->log->isDebugEnabled()){
-        $this->log->debug(sprintf(
-          'JobQueueName:%s label:%s workers:%d',
-          $this->jobQueue->getName(),
-          $label,
-          count($workers)
-        ));
-      }
-      $job = $this->jobQueue->findJob($this->opid, $label);
-      if(is_null($job)) continue;
-      foreach($workers as $worker){
-        $worker($job);
-      }
-      $workedCnt++;
+
+    $labels = array_keys($this->workers);
+    if(empty($labels)) return false;
+
+    $job = $this->jobQueue->findJob($this->opid, $labels);
+    if(is_null($job)) return false;
+
+    $label = $job->getLabel();
+    $workers = $this->workers[$label];
+
+    if($this->log->isDebugEnabled()){
+      $this->log->debug(sprintf(
+        'JobQueueName:%s label:%s workers:%d',
+        $this->jobQueue->getName(),
+        $label,
+        count($workers)
+      ));
     }
-    return $workedCnt > 0;
+
+    foreach($workers as $worker){
+      $worker($job);
+    }
+
+    return true;
   }
 
 }
