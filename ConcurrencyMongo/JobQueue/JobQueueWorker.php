@@ -79,7 +79,11 @@ class JobQueueWorker {
   public function run() {
     $this->log->debug('call');
 
-    $labels = array_keys($this->workers);
+    $labels = array();
+    foreach(array_keys($this->workers) as $label){
+      if($this->isWorkable($label)) $labels[] = $label;
+    }
+
     if(empty($labels)) return false;
 
     $job = $this->jobQueue->findJob($this->opid, $labels);
@@ -103,6 +107,18 @@ class JobQueueWorker {
 
     return true;
   }
+
+
+
+  /**
+   * ラベルのワーカーが実行できる場合true
+   * 必要に応じてオーバライドして利用してください
+   */
+  public function isWorkable($label){
+    return array_key_exists($label, $this->workers);
+  }
+
+
 
 }
 
