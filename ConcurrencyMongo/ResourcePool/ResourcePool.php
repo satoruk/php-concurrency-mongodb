@@ -68,12 +68,10 @@ class ResourcePool {
   // }
   protected $list;
 
-  public function __construct($mongoDB, $name, $opts=array()) {
-    $this->log = Logger::getLogger(__CLASS__);
 
-    if (!($mongoDB instanceof MongoDB)) {
-      throw new InvalidArgumentException('An argument is not MongoDB instance.');
-    }
+
+  public function __construct(MongoDB $mongoDB, $name, array $opts=array()) {
+    $this->log = Logger::getLogger(__CLASS__);
 
     $name = self::$prefixMC . $name;
 
@@ -113,23 +111,33 @@ class ResourcePool {
     $this->checkin();
   }
 
+
+
   public function __destruct() {
     try {
       $this->checkout();
     }catch(ResourceException $e){}
   }
 
+
+
   public function getUUID() {
     return $this->uuid;
   }
+
+
 
   public function getAllocatedSize() {
     return count($this->list);
   }
 
+
+
   public function unlock() {
     $this->expiredAtLock = 0;
   }
+
+
 
   /**
    * リソースプーリングに利用しているコレクションの削除
@@ -140,6 +148,8 @@ class ResourcePool {
       $this->$mc = null;
     }
   }
+
+
 
   /**
    * 並列リソースプーリングにエントリーして他のプールに知らせる.
@@ -157,6 +167,8 @@ class ResourcePool {
     $this->clean();
   }
 
+
+
   /**
    * 並列リソースプールからの脱退
    */
@@ -167,6 +179,8 @@ class ResourcePool {
     $this->mcPools->remove(array('_id' => $this->uuid));
     $this->clean();
   }
+
+
 
   /**
    * リソースの定義
@@ -181,6 +195,8 @@ class ResourcePool {
     return $v;
   }
 
+
+
   /**
    * 不要なリソースの削除
    */
@@ -194,6 +210,8 @@ class ResourcePool {
       throw new Exception('Mongo error : ' . var_export($v, true));
     }
   }
+
+
 
   /**
    * リソースの延長処理
@@ -217,6 +235,8 @@ class ResourcePool {
     }
     $this->allocate();
   }
+
+
 
   /**
    * リソースの割当
@@ -286,6 +306,8 @@ EOD;
     }
   }
 
+
+
   /**
    * 自プールが調停者か否か
    * 調停者の場合、並列リソースプールの中で余っているリソースを利用することが出来る.
@@ -294,6 +316,8 @@ EOD;
     // TODO あとで実装
     return false;
   }
+
+
 
   /**
    * 利用可能な自プールの全リソースの取得
@@ -310,6 +334,8 @@ EOD;
     }
     return $list;
   }
+
+
 
   /**
    * 利用可能な自プールのリソースの取得
@@ -331,7 +357,25 @@ EOD;
     return null;
   }
 
-  public function status($opts=array()) {
+
+
+  /**
+   * 未割当のリソースがある場合true
+   */
+  public function hasFree(){
+    $this->update();
+    $now = time();
+    foreach($this->list as &$v) {
+      if ($v['status'] < $now) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+
+
+  public function status(array $opts=array()) {
     $now = time();
     $cntFree = 0;
     $cntUsing = 0;

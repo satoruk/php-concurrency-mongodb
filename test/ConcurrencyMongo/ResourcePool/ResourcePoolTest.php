@@ -60,12 +60,18 @@ class ResourcePoolTest extends PHPUnit_Framework_TestCase
       $pool->def($v);
     }
 
+    // 未割当のリソースの確認
+    $this->assertTrue($pool->hasFree());
+
     $datas1 = $pool->getAll();
     $this->assertEquals(5, count($datas1));
 
     // 解放してないため、リソースなし
     $datas2 = $pool->getAll();
     $this->assertEquals(0, count($datas2));
+
+    // 未割当のリソースの確認
+    $this->assertFalse($pool->hasFree());
 
     // 全て解放して取得
     foreach($datas1 as $data) {
@@ -237,14 +243,8 @@ class ResourcePoolTest extends PHPUnit_Framework_TestCase
   public function testNewArgumentExceptionAtMongoDB() {
     $this->log->debug('call');
 
-    try {
-      $pool = new ResourcePool('', 'test');
-    } catch (Exception $e) {
-      $this->assertInstanceOf('InvalidArgumentException', $e);
-      $this->assertRegExp('/MongoDB/', $e->getMessage());
-      return;
-    }
-    $this->fail('Should be throw an InvalidArgumentException');
+    $this->setExpectedException('PHPUnit_Framework_Error');
+    $pool = new ResourcePool('', 'test');
   }
 
 
