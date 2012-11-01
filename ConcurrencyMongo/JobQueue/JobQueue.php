@@ -88,7 +88,9 @@ class JobQueue {
 
   public function ensureIndex() {
     $this->log->debug('call');
-    $this->mcJobQueue->ensureIndex(array('label'=>1, 'lockExpiredAt'=>1), array('background'=>true));
+    $mc = $this->mcJobQueue;
+    $opts = array('background'=>true);
+    $mc->ensureIndex(array('label'=>1, 'lockExpiredAt'=>1, 'priority'=>1, '_id'=>1), $opts);
   }
 
 
