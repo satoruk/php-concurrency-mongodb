@@ -18,7 +18,7 @@ class JobQueue {
     'name'       => 'default', // collection name
     'priority'   => 5,         // priority, 0 is most high priority
     'bufferSize' => 100,       // buffer size
-    'autoIndex'  => false,     // ensure indexes automatically
+    'autoIndex'  => true,      // ensure indexes automatically
     'extraExpiredSec' => 60    // 失効延長時間(秒) 失効した場合 expiredWaitがコールされる.
   );
 
@@ -36,7 +36,7 @@ class JobQueue {
   protected $mdb;
   protected $mcJobQueue;
 
-  public function __construct(MongoDB $mongoDB, $opts=array()) {
+  public function __construct(MongoDB $mongoDB, array $opts=array()) {
     $this->log = Logger::getLogger(__CLASS__);
 
     $defaultOpts = self::$defaultOptions;
@@ -45,9 +45,6 @@ class JobQueue {
       $mergedOpts[$k] = isset($opts[$k]) ? $opts[$k]: $v;
       unset($opts[$k]);
     }
-
-    if(!($mongoDB instanceof MongoDB))
-      throw new InvalidArgumentException('$mongodb is not MongoDB instance.');
 
     if(!empty($opts))
       throw new InvalidArgumentException('Unknown opts keys : ' . implode(' and ',array_keys($opts)));
@@ -90,9 +87,8 @@ class JobQueue {
 
 
   public function ensureIndex() {
-    $this->log->warn('this method is pending');
-    // TODO
-    //$this->mcJobQueue->ensureIndex(array('opid'=>1,'label'=>1), array('safe'=>true));// 
+    $this->log->debug('call');
+    $this->mcJobQueue->ensureIndex(array('label'=>1, 'lockExpiredAt'=>1), array('background'=>true));
   }
 
 

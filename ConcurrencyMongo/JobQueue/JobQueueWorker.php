@@ -79,6 +79,8 @@ class JobQueueWorker {
   public function run() {
     $this->log->debug('call');
 
+    // TODO: runメソッドが実行される度にLabelが変わるようにする.
+
     $labels = array();
     foreach(array_keys($this->workers) as $label){
       if($this->isWorkable($label)) $labels[] = $label;
