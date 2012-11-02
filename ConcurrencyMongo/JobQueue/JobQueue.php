@@ -90,7 +90,7 @@ class JobQueue {
     $this->log->debug('call');
     $mc = $this->mcJobQueue;
     $opts = array('background'=>true);
-    $mc->ensureIndex(array('label'=>1, 'lockExpiredAt'=>1, 'priority'=>1, '_id'=>1), $opts);
+    $mc->ensureIndex(array('priority'=>1, '_id'=>1), $opts);
   }
 
 
@@ -296,10 +296,11 @@ class JobQueue {
 function(mcName, labels, extraMSec, uuid){
   var now, q, u, s;
   now=new Date();
-  q={lockExpiredAt:{$lt:now}};
+  q={};
   if (labels.length > 0) q.label = {$in:labels};
+  q.lockExpiredAt = {$lt:now};
   u={$set:{lockExpiredAt:new Date(now.getTime() + extraMSec),lockBy:uuid}};
-  s={priority:1,_id:1};
+  s={priority:1};
   return db[mcName].findAndModify({query:q, update:u, sort:s, new:true});
 }
 EOD;
