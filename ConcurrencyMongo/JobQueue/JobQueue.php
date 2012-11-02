@@ -17,9 +17,9 @@ class JobQueue {
   public static $defaultOptions = array(
     'name'       => 'default', // collection name
     'priority'   => 5,         // priority, 0 is most high priority
-    'bufferSize' => 100,       // buffer size
+    'bufferSize' => 1000,      // buffer size
     'autoIndex'  => true,      // ensure indexes automatically
-    'extraExpiredSec' => 60    // 失効延長時間(秒) 失効した場合 expiredWaitがコールされる.
+    'extraExpiredSec' => 60    // job block time. jobの大まかな処理時間.
   );
 
   protected static $prefixMC = 'JobQueue_';
@@ -27,9 +27,10 @@ class JobQueue {
   protected $opts;
 
   /**
-   * array( $label=>array( 'expired'=>integer $expiredTime, 'jobs'=>array( array('opid'=>string, 'value'=>mixed $value, 'opts'=>array() ), ... ) ), ... )
+   * count     : job quantity
+   * jobs      : array( $label=>array( array('opid'=>string, 'value'=>mixed $value, 'opts'=>array() ), ... ) )
    */
-  protected $bufferDatas = array();
+  protected $bufferDatas = array('count'=>0, 'jobs'=>array() );
   protected $bufferSize;
   protected $buffered = false;
 
@@ -66,7 +67,6 @@ class JobQueue {
 
     $this->opts = $mergedOpts;
     $this->bufferSize = intval($mergedOpts['bufferSize']);
-    $this->extraExpiredSec = intval($mergedOpts['extraExpiredSec']);
     $this->mdb = $mongoDB;
     $this->mcJobQueue = $mongoDB->selectCollection(self::$prefixMC . $mergedOpts['name']);
 
@@ -153,66 +153,21 @@ class JobQueue {
       if(!is_integer($mergedOpts[$k]))
         throw new InvalidArgumentException(sprintf('%s of $opts is only accept integer value.', $k));
 
-    if(!array_key_exists($label, $this->bufferDatas)) {
-      $this->beforeCreateBuffer($label);
-      $extraExpiredSec4Buffer = 1;// 1秒でFlushするようにする
-      $this->bufferDatas[$label] = array('jobs'=>array(), 'expired'=>time()+$extraExpiredSec4Buffer);
+    if(!array_key_exists($label, $this->bufferDatas['jobs'])) {
+      $this->bufferDatas['jobs'][$label] = array();
     }
 
-    $this->bufferDatas[$label]['jobs'][] = array('opid' => $opid, 'value'=>$value, 'opts'=>$mergedOpts);
+    $this->bufferDatas['jobs'][$label][] = array('opid' => $opid, 'value'=>$value, 'opts'=>$mergedOpts);
+    $this->bufferDatas['count']++;
 
     if($this->log->isTraceEnabled()){
-      $this->log->trace(sprintf('call enqueue label:%s, jobs:%d', $label, count($this->bufferDatas[$label]['jobs'])));
-      //      $this->log->debug($this->bufferDatas);
+      $cnt = count($this->bufferDatas['jobs'][$label]);
+      $this->log->trace(
+        sprintf('call enqueue label:%s, jobs:%d', $label, $cnt)
+      );
     }
 
     $this->flush();
-  }
-
-
-
-  protected function beforeCreateBuffer($label){
-    // jobの欠損を防ぐためバッファ作成時にJobQueueの空きを確認する.
-    $expired = time() + $this->extraExpiredSec;
-    $threshold = $this->bufferSize * 10;// JobQueueの上限の閾値を計算 TODO 設定できる方がいいか？
-    $secPrev = 0;
-    $sec = 1;
-    while(true){
-      $cnt = $this->mcJobQueue->count(array('label'=>$label));
-      if($cnt < $threshold) break;
-      if($expired <= time()){
-        $this->expiredWait($label);
-        break;
-      }
-      $tmp = $sec;
-      $sec = $sec + $secPrev;
-      $secPrev = $tmp;
-      // 余分に待ちすぎない様調整
-      $now = time();
-      if($expired < $now + $sec){
-        $sec = $expired - $now;
-      }
-      if($this->log->isTraceEnabled()){
-        $this->log->trace(sprintf('label:%s cnt:%d threshold:%d sleepSec:%d', $label, $cnt, $threshold, $sec));
-      }
-      // wait
-      $tmp = $now + $sec;
-      while($tmp > time()) $this->wait();
-    }
-  }
-
-
-
-  protected function expiredWait($label){
-    $this->log->warn(sprintf('expired wait, label %s of %s is still full.', $label, $this->getName()));
-  }
-
-
-  /**
-   * 待ち時間を利用する目的で割り込みさせる場合このメソッドをオーバライド
-   */
-  protected function wait(){
-    sleep(1);
   }
 
 
@@ -237,24 +192,24 @@ class JobQueue {
 
 
   public function flush($force=false){
+    /**
+     * flushされる条件はjobsの合計が閾値を超えたときのみ
+     *
+     */
     $force = $force === true;
-    $flushedLabels = array();
-    $tmpJobs = array();
-    foreach($this->bufferDatas as $label => $datas){
-      $jobs = $datas['jobs'];
-      $cnt = count($jobs);
-      if($cnt <= 0) continue;
-      $forceByLabel = $force === true;
-      // force is true if buffer was expired
-      if($datas['expired'] <= time()){
-        $forceByLabel = true;
-        if($this->log->isTraceEnabled()){
-          $this->log->trace(sprintf('buffer datas expired, so force flush. label:%s ', $label));
-        }
+
+    if(!$this->isBuffer()) $force = true;
+
+    if(!$force){
+      if($this->bufferDatas['count'] < $this->bufferSize){
+          return;
       }
-      if(!$forceByLabel and $this->isBuffer() and $cnt < $this->bufferSize) continue;
-      foreach($jobs as $job) {
-        $tmpJobs[] = array(
+    }
+
+    $jobs = array();
+    foreach($this->bufferDatas['jobs'] as $label => $labelledJobs){
+      foreach($labelledJobs as $job) {
+        $jobs[] = array(
           'label'         => $label,
           'value'         => $job['value'],
           'priority'      => $job['opts' ]['priority'],
@@ -263,24 +218,24 @@ class JobQueue {
           'lockExpiredAt' => new MongoDate()
         );
       }
-      $flushedLabels[] = $label;
       if($this->log->isTraceEnabled()){
-        $this->log->trace(sprintf('to be flushed datas. qty:%d label:%s force:%s', $cnt, $label, var_export($force, true)));
+        $cnt = count($labelledJobs);
+        $this->log->trace(sprintf('to be flushed datas. label:[%s] qty:%d', $label, $cnt));
       }
     }
+    if(!empty($jobs)){
+      $this->batchInsert($jobs);
+    }
     // cleanup
-    foreach($flushedLabels as $label){
-      unset($this->bufferDatas[$label]);
-    }
-    if(!empty($tmpJobs)){
-      $this->batchInsert($tmpJobs);
-    }
+    $this->bufferDatas['jobs'     ] = array();
+    $this->bufferDatas['count'    ] = 0;
   }
 
 
 
   protected function batchInsert($jobs){
-    $this->mcJobQueue->batchInsert($jobs);
+    $opts = array('safe'=>true);
+    $this->mcJobQueue->batchInsert($jobs, $opts);
     if($this->log->isDebugEnabled()){
       $this->log->debug(sprintf('insert jobs qty:%d', count($jobs)));
     }

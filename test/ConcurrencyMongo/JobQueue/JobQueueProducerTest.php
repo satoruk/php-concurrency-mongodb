@@ -99,11 +99,10 @@ class JobQueueProducerTest extends PHPUnit_Framework_TestCase
       if($cnt==1){
         $q->enqueue('Sun'    , 'v_1');
         $q->enqueue('Mercury', 'v_2');
-        $q->enqueue('Mercury', 'v_3');
-        $self->assertEquals(0, $self->jobQueue->countJob());
-        $q->enqueue('Mercury', 'v_4');// ラベル毎のバッファなのでここでflushされる.
+        $q->enqueue('Mercury', 'v_3');// flush
         $self->assertEquals(3, $self->jobQueue->countJob());
-        $self->assertEquals(3, $self->jobQueue->countLabel('Mercury'));
+        $q->enqueue('Mercury', 'v_4');
+        $self->assertEquals(3, $self->jobQueue->countJob());
       }
       if($cnt==2){
         $self->assertEquals(3, $self->jobQueue->countJob());
@@ -118,35 +117,6 @@ class JobQueueProducerTest extends PHPUnit_Framework_TestCase
     $this->assertEquals(1, $this->jobQueue->countLabel('Sun'    ));
     $this->assertEquals(3, $this->jobQueue->countLabel('Mercury'));
     $this->assertEquals(1, $this->jobQueue->countLabel('Venus'  ));
-  }
-
-
-
-  /**
-   * バッファのタイムアウト処理
-   */
-  public function testBufferTImeout(){
-    $this->log->info('call');
-    $self = $this;
-    $cnt = 0;
-    $this->producer->set(function($q) use ($self, &$cnt){
-      ++$cnt;
-      if($cnt==1){
-        $q->enqueue('Sun', 'v_1');
-        sleep(2);// 強制的にタイムアウト
-        $self->assertEquals(0, $self->jobQueue->countJob());
-        $q->enqueue('Mercury', 'v_2');// timeoutでバッファがいったんflushされる
-        $self->assertEquals(1, $self->jobQueue->countJob());
-        $self->assertEquals(1, $self->jobQueue->countLabel('Sun'));
-        $q->enqueue('Mercury', 'v_3');
-      }
-    });
-    $this->producer->run();
-    $this->assertEquals(2, $cnt);
-    // 最後にまとめてflushされる
-    $this->assertEquals(3, $this->jobQueue->countJob());
-    $this->assertEquals(1, $this->jobQueue->countLabel('Sun'    ));
-    $this->assertEquals(2, $this->jobQueue->countLabel('Mercury'));
   }
 
 
