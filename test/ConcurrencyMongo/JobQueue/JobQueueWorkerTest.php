@@ -8,11 +8,30 @@ use MongoDB;
 use Logger;
 use ConcurrencyMongo\JobQueue\JobQueueProducer;
 use ConcurrencyMongo\JobQueue\JobQueueWorker;
+use ConcurrencyMongo\JobQueue\JobWorker;
+use ConcurrencyMongo\JobQueue\Job;
 use ConcurrencyMongo\JobQueue\ExpiredJobException;
 
+class TestJobWorker implements JobWorker {
 
-class JobQueueWorkerTest extends PHPUnit_Framework_TestCase
-{
+  private $func;
+
+  function __construct($func) {
+    $this->func = $func;
+  }
+
+  public function isWorkable($label) {
+    return true;
+  }
+
+  public function assignJob($label, Job $job) {
+    $func = $this->func;
+    $func($job);
+  }
+
+}
+
+class JobQueueWorkerTest extends PHPUnit_Framework_TestCase {
 
   public $log;
   public $mongoDB;
@@ -76,10 +95,10 @@ class JobQueueWorkerTest extends PHPUnit_Framework_TestCase
     // 
     $cnt = 0;
     $worker = new JobQueueWorker($this->mongoDB, array('name'=>'test'));
-    $worker->add('LABEL_001', function($job) use ($self, &$cnt){
+    $worker->addJobWorker('LABEL_001', new TestJobWorker(function($job) use ($self, &$cnt){
       ++$cnt;
       $self->log->trace(sprintf('cnt:%d value:%s', $cnt, $job->getValue()));
-      
+
       if($cnt==1){
         // ジョブを解放してキャンセル
         $self->assertEquals('value 001_01', $job->getValue());
@@ -97,7 +116,7 @@ class JobQueueWorkerTest extends PHPUnit_Framework_TestCase
       else{
         $job->done();// doneさせないとデストラクタで自動的にreleaseされ無限ループになる
       }
-    });
+    }));
     while($worker->run());// Jobがある限りループ
 
     $this->assertEquals(2, $cnt);
@@ -125,14 +144,14 @@ class JobQueueWorkerTest extends PHPUnit_Framework_TestCase
 
     $cnt = 0;
     $worker = new JobQueueWorker($this->mongoDB, array('name'=>'test'));
-    $worker->add('LABEL_001', function($job) use ($self, &$cnt){
+    $worker->addJobWorker('LABEL_001', new TestJobWorker(function($job) use ($self, &$cnt){
       ++$cnt;
       $self->log->debug($job->getValue());
       if($cnt==1) $self->assertEquals('value 001_01', $job->getValue());
       if($cnt==2) $self->assertEquals('value 001_02', $job->getValue());
       if($cnt==3) $self->assertEquals('value 001_03', $job->getValue());
       $job->done();
-    });
+    }));
     while($worker->run());
     $self->assertEquals(3, $cnt);
   }
@@ -159,7 +178,7 @@ class JobQueueWorkerTest extends PHPUnit_Framework_TestCase
     $cnt = 0;
     $exceptions = array();
     $worker = new JobQueueWorker($this->mongoDB, array('name'=>'test', 'extraExpiredSec'=>2));
-    $worker->add('LABEL_001', function($job) use ($self, &$cnt, &$exceptions){
+    $worker->addJobWorker('LABEL_001', new TestJobWorker(function($job) use ($self, &$cnt, &$exceptions){
       ++$cnt;
       $self->log->trace(sprintf('cnt:%d value:%s', $cnt, $job->getValue()));
       
@@ -192,7 +211,7 @@ class JobQueueWorkerTest extends PHPUnit_Framework_TestCase
       else{
         $job->done();
       }
-    });
+    }));
     while($worker->run());
 
     $self->assertEquals(4, $cnt);// 失効2回の、実行中2で計4

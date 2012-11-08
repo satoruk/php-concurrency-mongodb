@@ -8,6 +8,7 @@ use Logger;
 use ConcurrencyMongo\JobQueue\JobQueueException;
 use ConcurrencyMongo\JobQueue\JobQueue;
 use ConcurrencyMongo\JobQueue\Job;
+use ConcurrencyMongo\JobQueue\JobWorker;
 
 
 class JobQueueWorker {
@@ -53,18 +54,17 @@ class JobQueueWorker {
 
 
 
-  public function add($label, $func) {
-    if(!is_string($label))
-      throw new InvalidArgumentException('function only accepts string. Input was: ' . $label);
-
-    if(!is_callable($func))
-      throw new InvalidArgumentException('function only accepts function. Input was: ' . $func);
-
-    if(in_array($label, $this->workers))
-      $this->workers[$label] = array();
-
-    $this->workers[$label][] = $func;
+  public function addJobWorker($label, JobWorker $worker) {
+    static $errMsg = 'function only accepts \'%s\'. Input was \'%s\'';
+    if(gettype($label)!=='string')
+      throw new InvalidArgumentException(sprintf($errMsg, 'string', gettype($label)));
+    if(is_null($worker)) return false;
+    if(!in_array($label, $this->workers)) $this->workers[$label] = array();
+    if(in_array($worker, $this->workers[$label], true)) return false;
+    $this->workers[$label][] = $worker;
+    return true;
   }
+
 
 
   /**
@@ -78,8 +78,6 @@ class JobQueueWorker {
    */
   public function run() {
     $this->log->debug('call');
-
-    // TODO: runメソッドが実行される度にLabelが変わるようにする.
 
     $labels = array();
     foreach(array_keys($this->workers) as $label){
@@ -103,8 +101,10 @@ class JobQueueWorker {
       ));
     }
 
-    foreach($workers as $worker){
-      $worker($job);
+    foreach($workers as $worker) {
+      if($worker->isWorkable($label)) {
+        $worker->assignJob($label, $job);
+      }
     }
 
     return true;
@@ -117,7 +117,16 @@ class JobQueueWorker {
    * 必要に応じてオーバライドして利用してください
    */
   public function isWorkable($label){
-    return array_key_exists($label, $this->workers);
+    if(!array_key_exists($label, $this->workers)) {
+      return false;
+    }
+    $workers = $this->workers[$label];
+    foreach($workers as $worker) {
+      if($worker->isWorkable($label)) {
+        return true;
+      }
+    }
+    return false;
   }
 
 
