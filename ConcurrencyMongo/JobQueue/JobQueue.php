@@ -307,7 +307,7 @@ function(mcName, labels, extraMSec, uuid){
   if (labels.length > 0) q.label = {$in:labels};
   q.lockExpiredAt = {$lt:now};
   u={$set:{lockExpiredAt:new Date(now.getTime() + extraMSec),lockBy:uuid}};
-  s={priority:1};
+  s={priority:1,resolution:1};
   return db[mcName].findAndModify({query:q, update:u, sort:s, new:true});
 }
 EOD;
