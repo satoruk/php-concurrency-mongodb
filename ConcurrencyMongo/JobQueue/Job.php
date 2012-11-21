@@ -21,17 +21,17 @@ class Job {
 
   public function __construct($mcJobQueue, $opts=array()) {
     $this->log = Logger::getLogger(__CLASS__);
-
-    $mergedOpts = array();
-    $defaultOpts = array(
+    static $defaultOpts = array(
       '_id'           => null,
       'label'         => null,
       'value'         => null,
       'lockBy'        => null,
       'lockExpiredAt' => null,
       'opid'          => null,
-      'priority'      => null
+      'priority'      => null,
+      'resolution'    => null
     );
+    $mergedOpts = array();
 
     foreach($defaultOpts as $k => $v) {
       $mergedOpts[$k] = isset($opts[$k]) ? $opts[$k]: $v;

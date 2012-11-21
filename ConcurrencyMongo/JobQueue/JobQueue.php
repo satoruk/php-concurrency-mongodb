@@ -90,7 +90,7 @@ class JobQueue {
     $this->log->debug('call');
     $mc = $this->mcJobQueue;
     $opts = array('background'=>true);
-    $mc->ensureIndex(array('priority'=>1, '_id'=>1), $opts);
+    $mc->ensureIndex(array('priority'=>1, 'resolution'=>1, '_id'=>1), $opts);
   }
 
 
@@ -122,8 +122,14 @@ class JobQueue {
 
 
   public function enqueue($opid, $label, $value, $opts=array()){
+    static $resolution=0;
+    if(++$resolution > 100) {
+      $resolution=0;
+    }
+
     $defaultOpts = array(
-      'priority' => $this->opts['priority']
+      'priority'   => $this->opts['priority'],
+      'resolution' => $resolution
     );
 
     $mergedOpts = array();
@@ -213,6 +219,7 @@ class JobQueue {
           'label'         => $label,
           'value'         => $job['value'],
           'priority'      => $job['opts' ]['priority'],
+          'resolution'    => $job['opts' ]['resolution'],
           'opid'          => $job['opid'],
           'lockBy'        => null,
           'lockExpiredAt' => new MongoDate()
