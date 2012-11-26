@@ -77,7 +77,15 @@ class JobQueueWorker {
    * 処理したらtrue
    */
   public function run() {
-    $this->log->debug('call');
+    if($this->log->isTraceEnabled()){
+      $stacks = array();
+      foreach(debug_backtrace() as $t) {
+        $stacks[] = sprintf('file: %s on %d %s', @$t['file'], @$t['line'], @$t['function']);
+      }
+      $this->log->trace('call '.implode(PHP_EOL, $stacks) );
+    } else {
+      $this->log->debug('call');
+    }
 
     $labels = array();
     foreach(array_keys($this->workers) as $label){
