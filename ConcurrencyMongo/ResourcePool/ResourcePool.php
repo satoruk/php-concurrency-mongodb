@@ -184,6 +184,7 @@ class ResourcePool {
 
   /**
    * リソースの定義
+   * 重複するリソースは上書きされます.
    */
   public function def($resource) {
     $v = $this->mcDatas->update(
@@ -329,7 +330,7 @@ EOD;
     foreach($this->list as &$v) {
       if ($v['status'] < $now) {
         $v['status'] = self::$statusInUse;
-        $list[] = new ResourceData($this, &$v);
+        $list[] = new ResourceData($this, $v);
       }
     }
     return $list;
@@ -352,7 +353,7 @@ EOD;
     if (!empty($list)) {
       $v = &$list[rand(0, count($list) - 1)];
       $v['status'] = self::$statusInUse;
-      return new ResourceData($this, &$v);
+      return new ResourceData($this, $v);
     }
     return null;
   }
