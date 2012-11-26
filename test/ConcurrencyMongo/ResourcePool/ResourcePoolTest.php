@@ -56,7 +56,7 @@ class ResourcePoolTest extends PHPUnit_Framework_TestCase
 
     $uuid = uniqid('t-', true);
     $pool = new ResourcePool($this->mongoDB, 'test', array('uuid' => $uuid));
-    foreach(split(' ', 'a b c d e') as $v) {
+    foreach(explode(' ', 'a b c d e') as $v) {
       $pool->def($v);
     }
 
@@ -108,7 +108,7 @@ class ResourcePoolTest extends PHPUnit_Framework_TestCase
      * MongoDB上での悲観的ロック時間 [extraSecEx  ]  8sec = 4sec + 2sec + 2sec
      */
     $pool = new ResourcePool($this->mongoDB, 'test', array('extraSec' => 3, 'extraSecRate' => 0.5));
-    foreach(split(' ', 'a b c d e') as $v) {
+    foreach(explode(' ', 'a b c d e') as $v) {
       $pool->def($v);
     }
 
@@ -156,7 +156,7 @@ class ResourcePoolTest extends PHPUnit_Framework_TestCase
     $this->log->debug('call');
 
     $pool = new ResourcePool($this->mongoDB, 'test');
-    foreach(split(' ', 'a b c d e') as $v) {
+    foreach(explode(' ', 'a b c d e') as $v) {
       $pool->def($v);
     }
 
@@ -183,7 +183,7 @@ class ResourcePoolTest extends PHPUnit_Framework_TestCase
     $pool2 = new ResourcePool($this->mongoDB, 'test', array('uuid' => 'pool2'));
 
     // pool1はdefメソッドはロックを解除するため
-    foreach(split(' ', 'a b c d e') as $v) {
+    foreach(explode(' ', 'a b c d e') as $v) {
       $pool1->def($v);
     }
 
@@ -206,7 +206,7 @@ class ResourcePoolTest extends PHPUnit_Framework_TestCase
     $pool1 = new ResourcePool($this->mongoDB, 'test', array('uuid' => 'pool1'));
 
     // pool1はdefメソッドはロックを解除するため
-    foreach(split(' ', 'a b c d e') as $v) {
+    foreach(explode(' ', 'a b c d e') as $v) {
       $pool1->def($v);
     }
 
