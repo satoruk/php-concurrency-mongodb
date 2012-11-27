@@ -1,7 +1,7 @@
 {
   "name" : "satoruk/concurrency-mongo",
   "description" : "",
-  "version":"0.1",
+  "version":"0.1.0",
   "config": {
     "vendor-dir" : "vendor",
     "bin-dir"    : "bin"
