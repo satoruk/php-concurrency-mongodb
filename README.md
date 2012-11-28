@@ -1,3 +1,5 @@
+[![Build Status](https://travis-ci.org/satoruk/php-concurrency-mongodb.png)](https://travis-ci.org/satoruk/php-concurrency-mongodb)
+
 concurrency-mongodb
 ==================
 
