@@ -1,0 +1,191 @@
+#!/usr/bin/env php
+<?php
+
+namespace Test\Benchmark;
+
+require_once __DIR__ . '/bootstrap.php';
+
+use Mongo;
+use MongoDB;
+use MongoDate;
+use Logger;
+use ConcurrencyMongo\ResourcePool\ResourcePool;
+
+$log = Logger::getLogger(str_replace('\\', '.', __NAMESPACE__));
+
+function elapsetime() {
+  static $last=0;
+  $now = microtime(true);
+  $t = $now - $last;
+  $last = $now;
+  return $t;
+}
+
+function selectCollection(MongoDB $mongoDB, $name) {
+  global $log;
+  //$names = $mongoDB->getCollectionNames(); // undefined method why?
+  $res = $mongoDB->execute('db.getCollectionNames();');
+  if(!in_array($name, $res['retval'])){
+    $log->info(sprintf('dorop skipping: %s collection not found.', $name));
+    return false;
+  }
+  return $mongoDB->selectCollection($name);
+}
+
+function dropCollection(MongoDB $mongoDB, $name) {
+  global $log;
+  elapsetime();
+  $mcJobQueue = selectCollection($mongoDB, $name);
+  if($mcJobQueue === false) return;
+  $res = $mcJobQueue->drop();
+  if(@$res['ok'] != 1){
+    $log->error(sprintf('could not drop %s collection : %s', $name, var_export($res, true)));
+    exit(1);
+  }
+  $log->info(sprintf(
+    'droped %s collection (cost %s sec) : %s',
+    $name,
+    number_format(elapsetime(), 3),
+    $res['msg']
+  ));
+}
+
+function queueing(MongoDB $mongoDB, $qty) {
+  global $log;
+  static $opts = array('name'=>'benchmark', 'autoIndex'=>true, 'bufferSize' => 100);
+  $queue = new JobQueue($mongoDB, $opts);
+  $log->trace(sprintf('queueing %10s jobs', number_format($qty)));
+  elapsetime();
+  $queue->enableBuffer();
+  for ($i=1; $i<=$qty; $i++) {
+    $queue->enqueue(
+      sprintf('opid_%02d', $i % 97),
+      sprintf('L%03d', $i % 101),
+      sprintf('v_%2d', $i),
+      array('priority' => $i % 89)
+    );
+  }
+  $queue->disableBuffer();
+  $cost = elapsetime();
+  $ret = array();
+  $ret['sec'     ] = $cost;
+  $ret['KDoc/sec'] = $cost / ($qty / 1000);
+  $log->info(sprintf(
+    'queued   %10s (cost %6s sec. %s KDoc/sec)',
+    number_format($queue->countJob()),
+    number_format($ret['sec'     ], 3),
+    number_format($ret['KDoc/sec'], 3)
+  ));
+  return $ret;
+}
+
+
+
+elapsetime();
+$mongo = new Mongo();
+$mongoDB = $mongo->selectDB('test_php_cncurrencymongo');
+$mongoDB->setProfilingLevel(1);// 100ms
+$log->info(sprintf('create MongoDB instance cost %s', number_format(elapsetime(), 3)));
+
+dropCollection($mongoDB, 'resourcePool_benchmark_datas');
+dropCollection($mongoDB, 'resourcePool_benchmark_pools');
+
+$beginAt = time();
+sleep(2);
+
+$uuid = uniqid('bm-', true);
+$pool = new ResourcePool($mongoDB, 'benchmark', array('uuid' => $uuid));
+
+elapsetime();
+$resourceQty = 1000;
+for($i=0; $i < $resourceQty; $i++) {
+  $pool->def(sprintf('resource_%05d', $i));
+}
+$log->info(sprintf('defined %s resources cost %s', number_format($resourceQty), number_format(elapsetime(), 3)));
+
+elapsetime();
+$len = 10000;
+for($i=0; $i < $len; $i++) {
+  $data = $pool->get();
+  $data->release();
+}
+$log->info(sprintf('%s assign and release cost %s', number_format($len), number_format(elapsetime(), 3)));
+
+
+$sysProfile = selectCollection($mongoDB, 'system.profile');
+if($sysProfile === false) {
+  $log->error('not found system.profile collection.');
+  exit(1);
+}
+
+$format = pack('c',0x1B) . "[%sm %s " . pack('c',0x1B) . "[m";
+$agg = array();
+$query = array('ts'=>array('$gt'=>new MongoDate($beginAt)));
+$cursor = $sysProfile->find($query)->sort(array('millis'=>-1));
+foreach($cursor as $doc) {
+
+  $ns = @$doc['ns'];
+  if(is_null($ns)){
+    $log->info('not found ns ' . var_export($doc, true));
+    exit(1);
+  }
+
+  $op = @$doc['op'];
+  if(is_null($op)){
+    $log->info('not found op ' . var_export($doc, true));
+    exit(1);
+  }
+
+  $millis = @$doc['millis'];
+  if(is_null($millis)){
+    $log->info('not found millis ' . var_export($doc, true));
+    exit(1);
+  }
+
+  if(!isset($agg[$ns]     )) $agg[$ns]      = array();
+  if(!isset($agg[$ns][$op])) $agg[$ns][$op] = array();
+
+  $agg[$ns][$op][] = $millis;
+
+}
+
+foreach($agg as $ns=>$opVals){
+  foreach($agg[$ns] as $op => $millis){
+    $tmp = array();
+    if(empty($millis)){
+      $tmp['sample'] = 0;
+    }else{
+      $tmp['sample'] = count($millis);
+      $v = array_shift($millis);
+      $tmp['ave'] = $tmp['min'] = $tmp['max'] = $v;
+      foreach($millis as $v2) {
+        $tmp['ave'] = ($tmp['ave'] + $v2) / 2;
+        $tmp['min'] = min($tmp['min'], $v2);
+        $tmp['max'] = max($tmp['max'], $v2);
+      }
+    }
+    $agg[$ns][$op] = $tmp;
+  }
+}
+
+$buf = array();
+foreach($agg as $ns=>$opVals){
+  $buf[] = sprintf('%s',$ns);
+  foreach($agg[$ns] as $op => $v1){
+    $buf[] = sprintf('  %s',$op);
+    foreach($agg[$ns][$op] as $k => $v){
+      $buf[] = sprintf('    %-7s : %s', $k, $v);
+    }
+  }
+}
+if(empty($buf)){
+  $log->info(sprintf($format, '0;30;42', 'no slow query'));
+}else{
+  echo implode(PHP_EOL, $buf) . PHP_EOL;
+}
+
+//var_export($agg);
+
+
+
+
