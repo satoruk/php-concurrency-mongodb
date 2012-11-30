@@ -40,6 +40,7 @@ class ResourcePool {
 
   private $log;
 
+  protected $name;
   protected $uuid;
   protected $extraSec;
   protected $extraSecRate;
@@ -71,8 +72,11 @@ class ResourcePool {
 
 
   public function __construct(MongoDB $mongoDB, $name, array $opts=array()) {
-    $this->log = Logger::getLogger(__CLASS__);
+    static $logName = null;
+    if(null===$logName) $logName = str_replace('\\', '.', __CLASS__);
+    $this->log = Logger::getLogger($logName);
 
+    $this->name = $name;
     $name = self::$prefixMC . $name;
 
     $defaultOpts = array(
@@ -376,6 +380,10 @@ EOD;
 
 
 
+  /**
+   *
+   * @param array $opts  verbose key is boolean
+   */
   public function status(array $opts=array()) {
     $now = time();
     $cntFree = 0;
@@ -399,7 +407,7 @@ EOD;
     }
 
     $total = count($this->list);
-    $title = '[ Resource Pool Status ]';
+    $title = sprintf('[ Resource Pool Status : %s ]', $this->name);
     $stat = sprintf(
       '%4s total, %4s free, %4s us, %4s block (in 1m:%4s, 5m:%4s, 15m:%4s, over:%d)',
       $total,

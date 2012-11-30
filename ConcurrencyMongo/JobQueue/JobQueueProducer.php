@@ -19,7 +19,8 @@ class JobQueueProducer {
   protected $jobQueue;
 
   public function __construct(MongoDB $mongoDB, $opts=array()) {
-    $this->log = Logger::getLogger(__CLASS__);
+    static $logName = null;
+    $this->log = Logger::getLogger($logName);
 
     $defaultOpts = array(
       'opid' => uniqid('op') // Operation ID

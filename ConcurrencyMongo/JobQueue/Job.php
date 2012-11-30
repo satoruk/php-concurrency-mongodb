@@ -20,7 +20,9 @@ class Job {
 
 
   public function __construct($mcJobQueue, $opts=array()) {
-    $this->log = Logger::getLogger(__CLASS__);
+    static $logName = null;
+    if(null===$logName) $logName = str_replace('\\', '.', __CLASS__);
+    $this->log = Logger::getLogger($logName);
     static $defaultOpts = array(
       '_id'           => null,
       'label'         => null,

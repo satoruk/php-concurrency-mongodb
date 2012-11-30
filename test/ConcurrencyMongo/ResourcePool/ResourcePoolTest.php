@@ -11,8 +11,7 @@ use ConcurrencyMongo\ResourcePool\ResourcePool;
 
 /**
  */
-class ResourcePoolTest extends PHPUnit_Framework_TestCase
-{
+class ResourcePoolTest extends PHPUnit_Framework_TestCase {
 
 
   public $log;
@@ -24,9 +23,10 @@ class ResourcePoolTest extends PHPUnit_Framework_TestCase
    * Sets up the fixture, for example, opens a network connection.
    * This method is called before a test is executed.
    */
-  protected function setUp()
-  {
-    $this->log = Logger::getLogger('Test\ConcurrencyMongo\ResourcePool');
+  protected function setUp(){
+    static $logName = null;
+    if(null===$logName) $logName = str_replace('\\', '.', __CLASS__);
+    $this->log = Logger::getLogger($logName);
     $this->log->info('setup');
 
     $mongo = new Mongo();
@@ -42,8 +42,7 @@ class ResourcePoolTest extends PHPUnit_Framework_TestCase
    * Tears down the fixture, for example, closes a network connection.
    * This method is called after a test is executed.
    */
-  protected function tearDown()
-  {
+  protected function tearDown(){
   }
 
 

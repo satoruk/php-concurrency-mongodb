@@ -38,7 +38,9 @@ class JobQueue {
   protected $mcJobQueue;
 
   public function __construct(MongoDB $mongoDB, array $opts=array()) {
-    $this->log = Logger::getLogger(__CLASS__);
+    static $logName = null;
+    if(null===$logName) $logName = str_replace('\\', '.', __CLASS__);
+    $this->log = Logger::getLogger($logName);
 
     $defaultOpts = self::$defaultOptions;
     $mergedOpts = array();
@@ -90,7 +92,7 @@ class JobQueue {
     $this->log->debug('call');
     $mc = $this->mcJobQueue;
     $opts = array('background'=>true);
-    $mc->ensureIndex(array('priority'=>1, 'resolution'=>1, '_id'=>1), $opts);
+    $mc->ensureIndex(array('priority'=>1, '_id'=>1, 'resolution'=>1), $opts);
   }
 
 
@@ -307,7 +309,7 @@ function(mcName, labels, extraMSec, uuid){
   if (labels.length > 0) q.label = {$in:labels};
   q.lockExpiredAt = {$lt:now};
   u={$set:{lockExpiredAt:new Date(now.getTime() + extraMSec),lockBy:uuid}};
-  s={priority:1,resolution:1};
+  s={priority:1,_id:1,resolution:1};
   return db[mcName].findAndModify({query:q, update:u, sort:s, new:true});
 }
 EOD;
