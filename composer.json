@@ -14,10 +14,10 @@
     "pear-pear.apache.org/log4php/Apache_log4php" : "2.2.*"
   },
   "require-dev": {
-    "phpunit/phpunit": "3.7.*"
+    "phpunit/phpunit": "3.7.*",
+    "squizlabs/php_codesniffer"    : "1.4.*"
   },
   "repositories": [
-    { "type": "pear", "url": "http://pear.phpunit.de"},
     { "type": "pear", "url": "http://pear.apache.org/log4php/"}
   ]
 }
