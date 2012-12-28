@@ -61,6 +61,7 @@ Project setup
     $ cd concurrency-mongodb
     $ curl -s https://getcomposer.org/installer | php -- --install-dir=bin
     $ ./bin/composer.phar install --dev
+    $ ./bin/phpcs --config-set default_standard PSR2
 
 #### Testing
 
