@@ -1,7 +1,7 @@
 {
   "name" : "satoruk/concurrency-mongo",
   "description" : "some concurrency solution library with MongoDB",
-  "version":"dev-master",
+  "version":"0.1.1",
   "config": {
     "vendor-dir" : "vendor",
     "bin-dir"    : "bin"
